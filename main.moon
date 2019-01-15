@@ -79,6 +79,8 @@ drawLayer = (i) ->
 	layer.batch\flush!
 	
 print "wasd/arrows - move" -- +
+print "left click - build/edit" -- -+
+print "right click - remove" -- -
 print "=-/scroll - scale" -- +
 print "1..9 - layers" -- -
 print "0 - jump to x: 0, y: 0" -- +
