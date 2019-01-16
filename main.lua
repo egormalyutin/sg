@@ -57,6 +57,8 @@ end
 local layers = { }
 local currentLayer = nil
 local currentLayerI = 1
+local mode = "build"
+local lastMode = "build"
 local drawLines
 drawLines = function()
   local ww, wh = love.graphics.getDimensions()
@@ -112,6 +114,10 @@ print("u - undo")
 print("r - redo")
 print("n - switch anchor")
 print("m - switch mode to edit/build")
+print("ctrl - move by y in edit mode")
+print("y - copy in edit mode")
+print("shift - move by x in edit mode")
+print("p - paste in edit mode")
 print("f - toggle free move")
 print("v - view mode")
 print("s - save")
@@ -334,41 +340,51 @@ love.keypressed = function(key)
                 offsetX = 0
                 offsetY = 0
               else
-                if key == "1" then
-                  currentLayerI = 1
-                  currentLayer = layers[1]
-                else
-                  if key == "2" then
-                    currentLayerI = 2
-                    currentLayer = layers[2]
+                if key == "v" then
+                  if mode == "view" then
+                    mode = lastMode
+                    lastMode = "view"
                   else
-                    if key == "3" then
-                      currentLayerI = 3
-                      currentLayer = layers[3]
+                    lastMode = mode
+                    mode = "view"
+                  end
+                else
+                  if key == "1" then
+                    currentLayerI = 1
+                    currentLayer = layers[1]
+                  else
+                    if key == "2" then
+                      currentLayerI = 2
+                      currentLayer = layers[2]
                     else
-                      if key == "4" then
-                        currentLayerI = 4
-                        currentLayer = layers[4]
+                      if key == "3" then
+                        currentLayerI = 3
+                        currentLayer = layers[3]
                       else
-                        if key == "5" then
-                          currentLayerI = 5
-                          currentLayer = layers[5]
+                        if key == "4" then
+                          currentLayerI = 4
+                          currentLayer = layers[4]
                         else
-                          if key == "6" then
-                            currentLayerI = 6
-                            currentLayer = layers[6]
+                          if key == "5" then
+                            currentLayerI = 5
+                            currentLayer = layers[5]
                           else
-                            if key == "7" then
-                              currentLayerI = 7
-                              currentLayer = layers[7]
+                            if key == "6" then
+                              currentLayerI = 6
+                              currentLayer = layers[6]
                             else
-                              if key == "8" then
-                                currentLayerI = 8
-                                currentLayer = layers[8]
+                              if key == "7" then
+                                currentLayerI = 7
+                                currentLayer = layers[7]
                               else
-                                if key == "9" then
-                                  currentLayerI = 9
-                                  currentLayer = layers[9]
+                                if key == "8" then
+                                  currentLayerI = 8
+                                  currentLayer = layers[8]
+                                else
+                                  if key == "9" then
+                                    currentLayerI = 9
+                                    currentLayer = layers[9]
+                                  end
                                 end
                               end
                             end
@@ -410,10 +426,12 @@ love.draw = function()
   love.graphics.translate(offsetX, offsetY)
   love.graphics.scale(mapScale, mapScale)
   love.graphics.setColor(1, 0, 0, 1)
-  love.graphics.circle("fill", 0, 0, 3)
+  if mode ~= "view" then
+    love.graphics.circle("fill", 0, 0, 3)
+  end
   love.graphics.setColor(1, 1, 1, 1)
   for i, layer in ipairs(layers) do
-    if i == currentLayerI then
+    if i == currentLayerI or mode == "view" then
       love.graphics.setColor(1, 1, 1, 1)
     else
       love.graphics.setColor(1, 1, 1, 0.5)
@@ -429,15 +447,17 @@ love.draw = function()
   love.graphics.draw(canvas, 0, inventoryHeight * scaleY, 0, scaleX, scaleY)
   love.graphics.setBlendMode("alpha")
   love.graphics.pop()
-  love.graphics.push()
-  love.graphics.translate(0, inventoryHeight * scaleY)
+  if mode ~= "view" then
+    love.graphics.push()
+    love.graphics.translate(0, inventoryHeight * scaleY)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.setBlendMode("alpha", "premultiplied")
+    love.graphics.draw(linesCanvas, 0, 0)
+    love.graphics.setBlendMode("alpha")
+    love.graphics.pop()
+  end
   love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.setBlendMode("alpha", "premultiplied")
-  love.graphics.draw(linesCanvas, 0, 0)
-  love.graphics.setBlendMode("alpha")
-  love.graphics.pop()
-  love.graphics.setColor(1, 1, 1, 1)
-  local status = ""
+  local status = string.upper("[" .. mode .. "] ")
   if offsetX == 0 then
     status = status .. "x: 0"
   else

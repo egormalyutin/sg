@@ -49,6 +49,9 @@ layers = {}
 currentLayer = nil
 currentLayerI = 1
 
+mode = "build"
+lastMode = "build"
+
 drawLines = ->
 	ww, wh = love.graphics.getDimensions!
 
@@ -97,14 +100,18 @@ print "wasd/arrows - move" -- +
 print "left click - build/edit" -- -+
 print "right click - remove" -- -
 print "=-/scroll - scale" -- +
-print "1..9 - layers" -- -
+print "1..9 - layers" -- +
 print "0 - jump to x: 0, y: 0" -- +
 print "u - undo" -- -
 print "r - redo" -- -
 print "n - switch anchor" -- -
 print "m - switch mode to edit/build" -- -
+print "ctrl - move by y in edit mode" -- -
+print "y - copy in edit mode" -- +
+print "shift - move by x in edit mode" -- -
+print "p - paste in edit mode" -- +
 print "f - toggle free move" -- -
-print "v - view mode" -- -
+print "v - view mode" -- +
 print "s - save" -- -
 
 aabb = (a, b) ->
@@ -307,35 +314,6 @@ love.mousepressed = (mx, my, t) ->
 
 		return
 
-	-- else if t == 2
-		-- onmove = (mx, my) ->
-			-- if my <= inventoryHeight
-				-- -- love.mousemoved = nil
-				-- -- love.mousereleased = nil
-				-- return
-
-			-- my -= inventoryHeight
-			-- x = mx / cell
-			-- y = my / cell
-
-			-- -- TODO: visible map checking
-
-			-- for i, object in ipairs map
-				-- if (
-					-- x >= object.x and
-					-- y >= object.y and
-					-- x < object.x + objects[object.id].width / cell and
-					-- y < object.y + objects[object.id].height / cell
-				-- )
-					-- table.remove map, i
-
-		-- onmove mx, my
-
-		-- love.mousemoved = (mx, my) -> onmove mx / 2, my / 2
-		-- love.mousereleased = ->
-			-- love.mousemoved = nil
-			-- love.mousereleased = nil
-
 love.keypressed = (key) ->
 	if key == "a" or key == "left"
 		offsetX += mapScale * scrollCells * cell
@@ -364,6 +342,14 @@ love.keypressed = (key) ->
 	else if key == "0"
 		offsetX = 0
 		offsetY = 0
+
+	else if key == "v"
+		if mode == "view"
+			mode = lastMode
+			lastMode = "view"
+		else
+			lastMode = mode
+			mode = "view"
 
 	-- wtf
 	else if key == "1"
@@ -432,17 +418,18 @@ love.draw = ->
 	love.graphics.clear!
 	love.graphics.setScissor 0, 0, ww, pwh - statusHeight - inventoryHeight
 
-	-- love.graphics.translate (cell * math.floor offsetX / cell), offsetY
 	love.graphics.translate offsetX, offsetY
 	love.graphics.scale mapScale, mapScale
 
 	love.graphics.setColor 1, 0, 0, 1
-	love.graphics.circle "fill", 0, 0, 3 -- zero point
+
+	if mode != "view"
+		love.graphics.circle "fill", 0, 0, 3 -- zero point
 
 	love.graphics.setColor 1, 1, 1, 1
 
 	for i, layer in ipairs layers
-		if i == currentLayerI
+		if i == currentLayerI or mode == "view"
 			love.graphics.setColor 1, 1, 1, 1
 		else
 			love.graphics.setColor 1, 1, 1, 0.5
@@ -462,18 +449,19 @@ love.draw = ->
 	love.graphics.pop!
 
 	-- DRAW LINES ON FIELD
-	love.graphics.push!
-	love.graphics.translate 0, inventoryHeight * scaleY
-	love.graphics.setColor 1, 1, 1, 1
-	love.graphics.setBlendMode "alpha", "premultiplied"
-	love.graphics.draw linesCanvas, 0, 0
-	love.graphics.setBlendMode "alpha"
-	love.graphics.pop!
+	if mode != "view"
+		love.graphics.push!
+		love.graphics.translate 0, inventoryHeight * scaleY
+		love.graphics.setColor 1, 1, 1, 1
+		love.graphics.setBlendMode "alpha", "premultiplied"
+		love.graphics.draw linesCanvas, 0, 0
+		love.graphics.setBlendMode "alpha"
+		love.graphics.pop!
 
 	-- DRAW STATUS
 
 	love.graphics.setColor 1, 1, 1, 1
-	status = ""
+	status = string.upper "[" .. mode .. "] "
 
 	if offsetX == 0
 		status ..= "x: 0"
