@@ -8,7 +8,7 @@ local res
 local resWidth, resHeight
 local font
 local canvas, linesCanvas
-local inventoryBatch
+local inventoryBatch, inventoryCanvas
 local inventoryHeight
 local gameWidth = 400
 local gameHeight = 300
@@ -89,6 +89,19 @@ drawLayer = function(i)
   end
   return layer.batch:flush()
 end
+local drawInventory
+drawInventory = function()
+  love.graphics.push()
+  love.graphics.setCanvas(inventoryCanvas)
+  love.graphics.clear()
+  love.graphics.draw(inventoryBatch)
+  if currentItem then
+    love.graphics.setColor(0, 1, 0, 0.5)
+    love.graphics.rectangle("line", currentItem.inventoryX, currentItem.inventoryY, currentItem.width, currentItem.height)
+  end
+  love.graphics.setCanvas()
+  return love.graphics.pop()
+end
 print("wasd/arrows - move")
 print("left click - build/edit")
 print("right click - remove")
@@ -118,6 +131,7 @@ createObject = function(id, x, y, w, h)
   }
 end
 love.load = function()
+  local ww, wh = love.graphics.getDimensions()
   love.graphics.setDefaultFilter("nearest", "nearest")
   canvas = love.graphics.newCanvas(fieldWidth, fieldHeight)
   linesCanvas = love.graphics.newCanvas(fieldWidth * scaleX, fieldHeight * scaleY)
@@ -167,6 +181,10 @@ love.load = function()
     end
   end
   inventoryBatch:flush()
+  inventoryCanvas = love.graphics.newCanvas(ww, inventoryHeight)
+  love.graphics.setCanvas(inventoryCanvas)
+  love.graphics.draw(inventoryBatch)
+  love.graphics.setCanvas()
   return drawLines()
 end
 love.update = function() end
@@ -178,9 +196,11 @@ love.mousepressed = function(mx, my, t)
       local item = inventory[_index_0]
       if mx >= item.inventoryX and my >= item.inventoryY and mx <= item.inventoryX + item.width and my <= item.inventoryY + item.height then
         currentItem = item
+        drawInventory()
         return 
       end
     end
+    drawInventory()
     return 
   end
   if currentItem and currentItem.id and t == 1 then
@@ -191,8 +211,8 @@ love.mousepressed = function(mx, my, t)
       end
       mx = mx / mapScale
       my = my / mapScale
-      mx = mx - (offsetX / mapScale)
-      my = my - (offsetY / mapScale)
+      mx = mx - math.floor(offsetX / mapScale)
+      my = my - math.floor(offsetY / mapScale)
       my = my - (inventoryHeight / mapScale)
       local x = cell * math.floor(mx / cell)
       local y = cell * math.floor(my / cell)
@@ -224,39 +244,90 @@ love.mousepressed = function(mx, my, t)
     end
     onmove(mx, my)
     love.mousemoved = function(mx, my)
-      return onmove(mx / 2, my / 2)
+      return onmove(mx / scaleX, my / scaleY)
     end
     love.mousereleased = function()
       love.mousemoved = nil
       love.mousereleased = nil
     end
+    return 
+  end
+  if currentItem and currentItem.id and t == 2 then
+    local onmove
+    onmove = function(mx, my)
+      if my <= inventoryHeight then
+        return 
+      end
+      mx = mx / mapScale
+      my = my / mapScale
+      mx = mx - math.floor(offsetX / mapScale)
+      my = my - math.floor(offsetY / mapScale)
+      my = my - (inventoryHeight / mapScale)
+      local x = cell * math.floor(mx / cell)
+      local y = cell * math.floor(my / cell)
+      local newMap = { }
+      local _list_0 = currentLayer.map
+      for _index_0 = 1, #_list_0 do
+        local object = _list_0[_index_0]
+        if not (aabb({
+          x = x,
+          y = y,
+          width = 1,
+          height = 1
+        }, {
+          x = object.x,
+          y = object.y,
+          width = objects[object.id].width,
+          height = objects[object.id].height
+        })) then
+          table.insert(newMap, object)
+        end
+      end
+      currentLayer.map = newMap
+      return drawLayer(currentLayerI)
+    end
+    onmove(mx, my)
+    love.mousemoved = function(mx, my)
+      return onmove(mx / scaleX, my / scaleY)
+    end
+    love.mousereleased = function()
+      love.mousemoved = nil
+      love.mousereleased = nil
+    end
+    return 
   end
 end
 love.keypressed = function(key)
   if key == "a" or key == "left" then
-    offsetX = offsetX + (scrollCells * cell)
+    offsetX = offsetX + (mapScale * scrollCells * cell)
   else
     if key == "d" or key == "right" then
-      offsetX = offsetX - (scrollCells * cell)
+      offsetX = offsetX - (mapScale * scrollCells * cell)
     else
       if key == "w" or key == "up" then
-        offsetY = offsetY + (scrollCells * cell)
+        offsetY = offsetY + (mapScale * scrollCells * cell)
       else
         if key == "s" or key == "down" then
-          offsetY = offsetY - (scrollCells * cell)
+          offsetY = offsetY - (mapScale * scrollCells * cell)
         else
           if key == "=" then
-            if mapScale >= 5 or mapScale * 1.5 > 5 then
+            if mapScale >= 2 then
               return 
             end
-            mapScale = mapScale * 1.5
+            mapScale = mapScale + 0.5
+            local val = mapScale * scrollCells * cell
+            offsetX = val * math.floor(offsetX / val)
+            offsetY = val * math.floor(offsetY / val)
             return drawLines()
           else
             if key == "-" then
-              if mapScale <= 0.5 or mapScale / 1.5 < 0.5 then
+              if mapScale <= 0.5 then
                 return 
               end
-              mapScale = mapScale / 1.5
+              mapScale = mapScale - 0.5
+              local val = mapScale * scrollCells * cell
+              offsetX = val * math.floor(offsetX / val)
+              offsetY = val * math.floor(offsetY / val)
               return drawLines()
             else
               if key == "0" then
@@ -319,20 +390,23 @@ love.draw = function()
   local ww, wh = love.graphics.getDimensions()
   local pww, pwh = ww / 2, wh / 2
   love.graphics.push()
+  love.graphics.push()
+  love.graphics.push()
+  love.graphics.setColor(1, 1, 1, 1)
+  love.graphics.setBlendMode("alpha", "premultiplied")
+  love.graphics.scale(scaleX, scaleY)
+  love.graphics.draw(inventoryCanvas, 0, 0)
+  love.graphics.setBlendMode("alpha")
+  love.graphics.pop()
+  love.graphics.push()
+  love.graphics.translate(0, inventoryHeight * scaleY)
+  love.graphics.setColor(1, 1, 1, 1)
+  love.graphics.rectangle("fill", 0, 0, ww, scaleY * (pwh - inventoryHeight - statusHeight))
+  love.graphics.pop()
+  love.graphics.push()
   love.graphics.setCanvas(canvas)
   love.graphics.clear()
-  love.graphics.push()
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.draw(inventoryBatch)
-  if currentItem then
-    love.graphics.setColor(0, 1, 0, 0.5)
-    love.graphics.rectangle("line", currentItem.inventoryX, currentItem.inventoryY, currentItem.width, currentItem.height)
-  end
-  love.graphics.translate(0, inventoryHeight)
-  love.graphics.setColor(1, 1, 1, 1)
-  love.graphics.rectangle("fill", 0, 0, pww, pwh - inventoryHeight - statusHeight)
-  love.graphics.push()
-  love.graphics.setScissor(0, inventoryHeight, ww, pwh - inventoryHeight - statusHeight)
+  love.graphics.setScissor(0, 0, ww, pwh - statusHeight - inventoryHeight)
   love.graphics.translate(offsetX, offsetY)
   love.graphics.scale(mapScale, mapScale)
   love.graphics.setColor(1, 0, 0, 1)
@@ -352,7 +426,7 @@ love.draw = function()
   love.graphics.setCanvas()
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.setBlendMode("alpha", "premultiplied")
-  love.graphics.draw(canvas, 0, 0, 0, scaleX, scaleY)
+  love.graphics.draw(canvas, 0, inventoryHeight * scaleY, 0, scaleX, scaleY)
   love.graphics.setBlendMode("alpha")
   love.graphics.pop()
   love.graphics.push()

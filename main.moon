@@ -10,7 +10,7 @@ local res
 local resWidth, resHeight
 local font
 local canvas, linesCanvas
-local inventoryBatch
+local inventoryBatch, inventoryCanvas
 local inventoryHeight
 
 gameWidth  = 400
@@ -58,6 +58,7 @@ drawLines = ->
 
 	step = cell * mapScale
 	love.graphics.setColor 0, 0, 0, 0.3
+
 	x = 0
 	while x < ww
 		love.graphics.line x, 0, x, wh - statusHeight
@@ -77,6 +78,20 @@ drawLayer = (i) ->
 	for object in *layer.map
 		layer.batch\add objects[object.id].quad, object.x, object.y
 	layer.batch\flush!
+
+drawInventory = ->
+	love.graphics.push!
+	love.graphics.setCanvas inventoryCanvas
+	love.graphics.clear!
+
+	love.graphics.draw inventoryBatch
+
+	if currentItem
+		love.graphics.setColor 0, 1, 0, 0.5
+		love.graphics.rectangle "line", currentItem.inventoryX, currentItem.inventoryY, currentItem.width, currentItem.height
+	
+	love.graphics.setCanvas!
+	love.graphics.pop!
 	
 print "wasd/arrows - move" -- +
 print "left click - build/edit" -- -+
@@ -126,6 +141,8 @@ createObject = (id, x, y, w, h) ->
 	}
 
 love.load = ->
+	ww, wh = love.graphics.getDimensions!
+
 	-- GRAPHICS SETTINGS
 	love.graphics.setDefaultFilter "nearest", "nearest"
 
@@ -193,6 +210,12 @@ love.load = ->
 			inventoryHeight = down
 
 	inventoryBatch\flush!
+
+	inventoryCanvas = love.graphics.newCanvas ww, inventoryHeight
+	love.graphics.setCanvas inventoryCanvas
+	love.graphics.draw inventoryBatch
+	love.graphics.setCanvas!
+
 	drawLines!
 
 love.update = ->
@@ -205,22 +228,20 @@ love.mousepressed = (mx, my, t) ->
 		for item in *inventory
 			if mx >= item.inventoryX and my >= item.inventoryY and mx <= item.inventoryX + item.width and my <= item.inventoryY + item.height
 				currentItem = item
+				drawInventory!
 				return
+		drawInventory!
 		return
-
 
 	if currentItem and currentItem.id and t == 1
 		onmove = (mx, my) ->
-			if my <= inventoryHeight
-				-- love.mousemoved = nil
-				-- love.mousereleased = nil
-				return
+			return if my <= inventoryHeight
 
 			mx /= mapScale
 			my /= mapScale
 
-			mx -= offsetX / mapScale
-			my -= offsetY / mapScale
+			mx -= math.floor offsetX / mapScale
+			my -= math.floor offsetY / mapScale
 
 			my -= inventoryHeight / mapScale
 
@@ -236,11 +257,6 @@ love.mousepressed = (mx, my, t) ->
 					table.insert newMap, object
 			currentLayer.map = newMap
 				
-			-- for i, object in ipairs map
-				-- if aabb({ x: x, y: y, width: currentItem.width, height: currentItem.height }
-					-- { x: object.x, y: object.y, width: objects[currentItem.id].width, height: objects[currentItem.id].height })
-					-- table.remove map, i
-
 			table.insert currentLayer.map, { id: currentItem.id, x: x, y: y }
 			
 			drawLayer currentLayerI
@@ -248,11 +264,49 @@ love.mousepressed = (mx, my, t) ->
 
 		onmove mx, my
 
-		love.mousemoved = (mx, my) -> onmove mx / 2, my / 2
+		love.mousemoved = (mx, my) -> onmove mx / scaleX, my / scaleY
 		love.mousereleased = ->
 			love.mousemoved = nil
 			love.mousereleased = nil
-	
+
+		return
+
+	if currentItem and currentItem.id and t == 2
+		onmove = (mx, my) ->
+			return if my <= inventoryHeight
+
+			mx /= mapScale
+			my /= mapScale
+
+			mx -= math.floor offsetX / mapScale
+			my -= math.floor offsetY / mapScale
+
+			my -= inventoryHeight / mapScale
+
+			x = cell * math.floor mx / cell
+			y = cell * math.floor my / cell
+
+			-- TODO: visible map checking
+
+			newMap = {}
+			for object in *currentLayer.map
+				unless aabb({ x: x, y: y, width: 1, height: 1 }
+					{ x: object.x, y: object.y, width: objects[object.id].width, height: objects[object.id].height })
+					table.insert newMap, object
+			currentLayer.map = newMap
+				
+			drawLayer currentLayerI
+
+
+		onmove mx, my
+
+		love.mousemoved = (mx, my) -> onmove mx / scaleX, my / scaleY
+		love.mousereleased = ->
+			love.mousemoved = nil
+			love.mousereleased = nil
+
+		return
+
 	-- else if t == 2
 		-- onmove = (mx, my) ->
 			-- if my <= inventoryHeight
@@ -284,21 +338,27 @@ love.mousepressed = (mx, my, t) ->
 
 love.keypressed = (key) ->
 	if key == "a" or key == "left"
-		offsetX += scrollCells * cell
+		offsetX += mapScale * scrollCells * cell
 	else if key == "d" or key == "right"
-		offsetX -= scrollCells * cell
+		offsetX -= mapScale * scrollCells * cell
 	else if key == "w" or key == "up"
-		offsetY += scrollCells * cell
+		offsetY += mapScale * scrollCells * cell
 	else if key == "s" or key == "down"
-		offsetY -= scrollCells * cell
+		offsetY -= mapScale * scrollCells * cell
 
 	else if key == "="
-		return if mapScale >= 5 or mapScale * 1.5 > 5
-		mapScale *= 1.5
+		return if mapScale >= 2
+		mapScale += 0.5
+		val = mapScale * scrollCells * cell
+		offsetX = val * math.floor offsetX / val
+		offsetY = val * math.floor offsetY / val
 		drawLines!
 	else if key == "-"
-		return if mapScale <= 0.5 or mapScale / 1.5 < 0.5
-		mapScale /= 1.5
+		return if mapScale <= 0.5
+		mapScale -= 0.5
+		val = mapScale * scrollCells * cell
+		offsetX = val * math.floor offsetX / val
+		offsetY = val * math.floor offsetY / val
 		drawLines!
 
 	else if key == "0"
@@ -347,46 +407,32 @@ love.draw = ->
 	pww, pwh = ww / 2, wh / 2
 
 	love.graphics.push!
-	love.graphics.setCanvas canvas
-	love.graphics.clear!
 	love.graphics.push!
 
 	-- DRAW INVENTORY
 
-	-- TODO: batch it
-
-	-- for y, row in ipairs inventory
-		-- for x, item in ipairs row
-			-- ax = (x - 1) * cell
-			-- ay = (y - 1) * cell
-			-- inventoryBatch\add objects[item.id].quad, ax, ay
-
-			-- print "batched"
-
-			-- if currentItem == item
-				-- drawCurrent = ->
-					-- love.graphics.setcolor 0, 1, 0, 0.5
-					-- love.graphics.rectangle "line", ax, ay, cell, cell
-
+	love.graphics.push!
 	love.graphics.setColor 1, 1, 1, 1
-	love.graphics.draw inventoryBatch
-	if currentItem
-		love.graphics.setColor 0, 1, 0, 0.5
-		love.graphics.rectangle "line", currentItem.inventoryX, currentItem.inventoryY, currentItem.width, currentItem.height
+	love.graphics.setBlendMode "alpha", "premultiplied"
+	love.graphics.scale scaleX, scaleY
+	love.graphics.draw inventoryCanvas, 0, 0
+	love.graphics.setBlendMode "alpha"
+	love.graphics.pop!
 
 	-- DRAW FIELD
-
-	love.graphics.translate 0, inventoryHeight
-
+	love.graphics.push!
+	love.graphics.translate 0, inventoryHeight * scaleY
 	love.graphics.setColor 1, 1, 1, 1
-	love.graphics.rectangle "fill", 0, 0, pww, pwh - inventoryHeight - statusHeight
+	love.graphics.rectangle "fill", 0, 0, ww, scaleY * (pwh - inventoryHeight - statusHeight)
+	love.graphics.pop!
 
 	-- DRAW MAP
-
 	love.graphics.push!
-	
-	love.graphics.setScissor 0, inventoryHeight, ww, pwh - inventoryHeight - statusHeight
+	love.graphics.setCanvas canvas
+	love.graphics.clear!
+	love.graphics.setScissor 0, 0, ww, pwh - statusHeight - inventoryHeight
 
+	-- love.graphics.translate (cell * math.floor offsetX / cell), offsetY
 	love.graphics.translate offsetX, offsetY
 	love.graphics.scale mapScale, mapScale
 
@@ -404,16 +450,14 @@ love.draw = ->
 		love.graphics.draw layer.batch
 
 	love.graphics.setScissor!
-
 	love.graphics.pop!
 
 	-- DRAW SCALED WINDOW
-
 	love.graphics.pop!
 	love.graphics.setCanvas!
 	love.graphics.setColor 1, 1, 1, 1
 	love.graphics.setBlendMode "alpha", "premultiplied"
-	love.graphics.draw canvas, 0, 0, 0, scaleX, scaleY
+	love.graphics.draw canvas, 0, inventoryHeight * scaleY, 0, scaleX, scaleY
 	love.graphics.setBlendMode "alpha"
 	love.graphics.pop!
 
